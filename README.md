@@ -151,10 +151,10 @@ uvicorn app.main:app --reload --port 8002
 
 | Role | Username | Password | Mô tả |
 |---|---|---|---|
-| Customer | `customer@haui.vn` | `customer123` | Tạo ticket, theo dõi trạng thái |
-| Technician | `technician@haui.vn` | `tech123` | Nhận, xử lý, đóng ticket |
-| Manager | `manager@haui.vn` | `manager123` | Dashboard, phân công thủ công |
-| Admin | `admin@haui.vn` | `admin123` | Quản trị Keycloak |
+| Customer | `customer@haui.vn` | `<DEMO_PASSWORD>` | Tạo ticket, theo dõi trạng thái |
+| Technician | `technician@haui.vn` | `<DEMO_PASSWORD>` | Nhận, xử lý, đóng ticket |
+| Manager | `manager@haui.vn` | `<DEMO_PASSWORD>` | Dashboard, phân công thủ công |
+| Admin | `admin@haui.vn` | `<DEMO_PASSWORD>` | Quản trị Keycloak |
 
 ---
 

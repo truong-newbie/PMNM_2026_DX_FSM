@@ -73,7 +73,7 @@ Dashboard hiển thị:
 
 | User | Password | Role |
 |---|---|---|
-| admin | admin123 | Admin |
-| manager | manager123 | Manager |
-| technician | tech123 | Technician |
-| customer | customer123 | Customer |
+| admin | <DEMO_PASSWORD> | Admin |
+| manager | <DEMO_PASSWORD> | Manager |
+| technician | <DEMO_PASSWORD> | Technician |
+| customer | <DEMO_PASSWORD> | Customer |

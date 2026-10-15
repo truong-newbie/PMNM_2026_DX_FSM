@@ -216,7 +216,7 @@ curl -s -X POST http://localhost:8080/realms/dx-fsm/protocol/openid-connect/toke
   -d "grant_type=password" \
   -d "client_id=dx-fsm-frontend" \
   -d "username=manager@haui.vn" \
-  -d "password=manager123" | python -c "import sys,json; d=json.load(sys.stdin); print('Token:', d['access_token'][:50]+'...')"
+  -d "password=${MANAGER_PASSWORD:?set in .env}" | python -c "import sys,json; d=json.load(sys.stdin); print('Token:', d['access_token'][:50]+'...')"
 ```
 
 **Kết quả mong đợi**: Có `access_token` (chuỗi JWT dài).

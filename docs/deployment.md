@@ -51,7 +51,7 @@ curl http://localhost:3000                    # Frontend
 | Service | URL | Credentials |
 |---|---|---|
 | Frontend | http://localhost:3000 | SSO |
-| Keycloak | http://localhost:8080 | admin / admin123 |
+| Keycloak | http://localhost:8080 | admin / <DEMO_PASSWORD> |
 | MinIO Console | http://localhost:9001 | minioadmin / changeme_minio_123 |
 | n8n | http://localhost:5678 | admin / changeme_n8n_123 |
 | API (via APISIX) | http://localhost:9180/api/v1 | JWT |

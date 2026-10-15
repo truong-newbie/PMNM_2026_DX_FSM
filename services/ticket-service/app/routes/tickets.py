@@ -13,6 +13,7 @@ from fastapi import Query
 
 from app.db.database import get_db
 from app.models.ticket import Ticket, TicketHistory
+from app.models.user import User
 from app.config import get_settings
 from app.core.security import get_current_user, TokenUser
 
@@ -95,6 +96,84 @@ class AIClassifyResponse(BaseModel):
     method: str = "rule"
 
 
+class TicketUpdate(BaseModel):
+    """Body cho PATCH /tickets/{id} – chỉ field cần update."""
+    status: Optional[str] = None
+    technician_id: Optional[UUID] = None
+    technician_name: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    category: Optional[str] = None
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        valid = {"new", "assigned", "in_progress", "pending", "resolved", "closed", "cancelled"}
+        if v.lower() not in valid:
+            raise ValueError(f"status must be one of {valid}")
+        return v.lower()
+
+    @field_validator("priority")
+    @classmethod
+    def validate_priority_update(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if v.lower() not in VALID_PRIORITIES:
+            raise ValueError(f"priority must be one of {VALID_PRIORITIES}")
+        return v.lower()
+
+    @field_validator("category")
+    @classmethod
+    def validate_category_update(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if v.lower() not in VALID_CATEGORIES:
+            raise ValueError(f"category must be one of {VALID_CATEGORIES}")
+        return v.lower()
+
+
+# Allowed status transitions + required role/condition
+STATUS_TRANSITIONS: dict[str, dict] = {
+    "new": {
+        "allowed_next": {"assigned", "cancelled"},
+        "requires_technician": True,
+        "requires_role": None,
+    },
+    "assigned": {
+        "allowed_next": {"in_progress", "cancelled"},
+        "requires_technician": False,
+        "requires_role": None,
+    },
+    "in_progress": {
+        "allowed_next": {"pending", "resolved"},
+        "requires_technician": False,
+        "requires_role": None,
+    },
+    "pending": {
+        "allowed_next": {"in_progress", "resolved", "cancelled"},
+        "requires_technician": False,
+        "requires_role": None,
+    },
+    "resolved": {
+        "allowed_next": {"closed", "in_progress"},  # manager/admin mới được close
+        "requires_technician": False,
+        "requires_role": {"manager", "admin"},
+    },
+    "closed": {
+        "allowed_next": set(),  # terminal
+        "requires_technician": False,
+        "requires_role": None,
+    },
+    "cancelled": {
+        "allowed_next": set(),  # terminal
+        "requires_technician": False,
+        "requires_role": None,
+    },
+}
+
+
 # ─── Helpers ───────────────────────────────────────────────────────────────
 
 def _dt_to_str(dt: Optional[datetime]) -> Optional[str]:
@@ -104,14 +183,18 @@ def _dt_to_str(dt: Optional[datetime]) -> Optional[str]:
 
 
 def _build_ticket_response(ticket: Ticket) -> TicketResponse:
+    # SQLAlchemy enum trả về enum object, .value cho raw string
+    status_str = ticket.status.value if hasattr(ticket.status, "value") else ticket.status
+    priority_str = ticket.priority.value if hasattr(ticket.priority, "value") else ticket.priority
+    category_str = ticket.category.value if hasattr(ticket.category, "value") else ticket.category
     return TicketResponse(
         id=str(ticket.id),
         ticket_number=ticket.ticket_number,
         title=ticket.title,
         description=ticket.description,
-        status=ticket.status,
-        priority=ticket.priority,
-        category=ticket.category,
+        status=status_str,
+        priority=priority_str,
+        category=category_str,
         customer_id=str(ticket.customer_id),
         customer_name=ticket.customer_name,
         customer_email=ticket.customer_email,
@@ -384,5 +467,119 @@ async def create_ticket(
     background_tasks.add_task(
         _dispatch_n8n_webhook, ticket.id, ticket.ticket_number
     )
+
+    return _build_ticket_response(ticket)
+
+
+# ─── PATCH /tickets/{id} – status transition + partial update ─────────────
+
+@router.patch("/{ticket_id}", response_model=TicketResponse)
+async def update_ticket(
+    ticket_id: UUID,
+    update_data: TicketUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: TokenUser = Depends(get_current_user),
+):
+    """
+    PATCH /tickets/{id}
+    Body: {status?, technician_id?, technician_name?, description?, priority?, category?}
+
+    Status transition rules (enforced):
+      - new → assigned: requires technician_id in body
+      - resolved → closed: requires role manager or admin
+      - Other transitions: any authenticated user with role technician+
+      - closed/cancelled: terminal – cannot transition out
+
+    Returns: updated TicketResponse
+    """
+    # 1. Fetch ticket
+    result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
+    ticket = result.scalar_one_or_none()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    old_status = ticket.status.value if hasattr(ticket.status, "value") else ticket.status
+
+    # 2. Validate status transition if status is being changed
+    if update_data.status and update_data.status != old_status:
+        rule = STATUS_TRANSITIONS.get(old_status)
+        if not rule:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown current status: {old_status}",
+            )
+
+        if update_data.status not in rule["allowed_next"]:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Invalid transition: {old_status} → {update_data.status}. "
+                    f"Allowed: {sorted(rule['allowed_next']) or 'terminal state'}"
+                ),
+            )
+
+        # Rule: requires_technician (e.g., new → assigned cần technician_id)
+        if rule["requires_technician"] and not update_data.technician_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Transition {old_status} → {update_data.status} requires technician_id",
+            )
+
+        # Rule: requires_role (e.g., resolved → closed cần manager/admin)
+        if rule["requires_role"] and user.role not in rule["requires_role"]:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"Transition {old_status} → {update_data.status} requires "
+                    f"one of roles: {sorted(rule['requires_role'])}"
+                ),
+            )
+
+        ticket.status = update_data.status
+
+        # Auto-update timestamps
+        now = datetime.now(timezone.utc)
+        if update_data.status == "assigned" and not ticket.assigned_at:
+            ticket.assigned_at = now
+        elif update_data.status == "in_progress" and not ticket.started_at:
+            ticket.started_at = now
+        elif update_data.status == "resolved" and not ticket.resolved_at:
+            ticket.resolved_at = now
+        elif update_data.status == "closed" and not ticket.closed_at:
+            ticket.closed_at = now
+
+    # 3. Update other fields if provided
+    if update_data.technician_id is not None:
+        ticket.technician_id = update_data.technician_id
+    if update_data.technician_name is not None:
+        ticket.technician_name = update_data.technician_name
+    if update_data.description is not None:
+        ticket.description = update_data.description
+    if update_data.priority is not None:
+        ticket.priority = update_data.priority
+    if update_data.category is not None:
+        ticket.category = update_data.category
+
+    # 4. Write history row for status change
+    if update_data.status and update_data.status != old_status:
+        # Lookup local user.id from keycloak_id (sub); skip if not provisioned yet
+        actor_id = None
+        if user.sub:
+            result = await db.execute(
+                select(User.id).where(User.keycloak_id == user.sub)
+            )
+            actor_id = result.scalar_one_or_none()
+
+        history = TicketHistory(
+            ticket_id=ticket.id,
+            user_id=actor_id,
+            action="status_changed",
+            old_value=old_status,
+            new_value=update_data.status,
+        )
+        db.add(history)
+
+    await db.commit()
+    await db.refresh(ticket)
 
     return _build_ticket_response(ticket)

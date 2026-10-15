@@ -30,10 +30,10 @@ Access: http://localhost:3000
 
 | Role | Username | Password |
 |---|---|---|
-| Customer | `customer@haui.vn` | `customer123` |
-| Technician | `technician@haui.vn` | `tech123` |
-| Manager | `manager@haui.vn` | `manager123` |
-| Admin | `admin@haui.vn` | `admin123` |
+| Customer | `customer@haui.vn` | `<DEMO_PASSWORD>` |
+| Technician | `technician@haui.vn` | `<DEMO_PASSWORD>` |
+| Manager | `manager@haui.vn` | `<DEMO_PASSWORD>` |
+| Admin | `admin@haui.vn` | `<DEMO_PASSWORD>` |
 
 ## License
 

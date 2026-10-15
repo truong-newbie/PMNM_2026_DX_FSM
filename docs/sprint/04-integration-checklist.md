@@ -596,7 +596,7 @@ done
 echo "2. Get token from Keycloak..."
 TOKEN=$(curl -s -X POST http://localhost:8080/realms/dx-fsm/protocol/openid-connect/token \
   -d "grant_type=password" -d "client_id=dx-fsm-frontend" \
-  -d "username=manager@haui.vn" -d "password=manager123" \
+  -d "username=manager@haui.vn" -d "password=${MANAGER_PASSWORD:?set in .env}" \
   | jq -r .access_token)
 
 echo "3. List tickets..."

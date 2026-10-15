@@ -4,6 +4,7 @@
 
 import os
 import uuid
+from io import BytesIO
 from pathlib import Path
 from typing import Optional
 
@@ -35,10 +36,11 @@ def _minio_upload(data: bytes, object_name: str, content_type: str) -> str:
         raise S3Error("MinIO unavailable")
 
     data_length = len(data)
+    # MinIO put_object yêu cầu file-like object, không phải bytes
     client.put_object(
         settings.minio_bucket,
         object_name,
-        data,
+        BytesIO(data),
         data_length,
         content_type=content_type,
     )
@@ -79,8 +81,8 @@ async def upload_attachment(
 
     try:
         url = _minio_upload(file_data, object_name, content_type)
-    except S3Error:
-        # MinIO unavailable → dùng local filesystem
+    except (S3Error, Exception):
+        # MinIO unavailable (network, DNS, bucket missing, etc.) → local fallback
         url = _local_upload(file_data, file_name)
 
     return url, size
