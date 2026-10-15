@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="DX-FSM Ticket Service",
     description="Core API for Field Service Management Platform",
-    version="1.0.0",
+    version="1.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -92,6 +92,6 @@ app.include_router(admin.router, tags=["Admin"])
 async def root():
     return {
         "service": "DX-FSM Ticket Service",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "status": "running",
     }
