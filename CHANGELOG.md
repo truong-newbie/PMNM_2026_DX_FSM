@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v1.1.0-sprint4] – 2026-01-15
 
-Sprint 4 — ticket workflow completion, audit trail, outbox pattern, test coverage.
+Sprint 4 — ticket workflow completion, audit trail, outbox pattern, test coverage, dashboard metrics.
 
 ### Added
 
@@ -19,6 +19,21 @@ Sprint 4 — ticket workflow completion, audit trail, outbox pattern, test cover
   - Validation: empty/whitespace/5000 chars (422)
   - Body strip whitespace, audit logged to ticket_history
   - Author auto-provisioned from Keycloak sub (user_resolver)
+
+- **Dashboard Metrics (A10)** — manager/admin KPI endpoint
+  - `GET /admin/metrics?window_days=30` — counts, distributions, SLA stats
+  - Sections: by_status, by_priority, by_category, sla, activity (24h),
+    outbox health, top 5 assignees
+  - Breach rate = (breached + not_met) / total_scored
+  - 28 unit tests
+
+- **CI Pipeline** — 6 jobs (lint-python, lint-frontend, test-ticket-service
+  với Postgres, test-ai-service, test-frontend, secret-scan TruffleHog)
+
+- **Version bump** 1.0.0 → 1.1.0 (ticket-service + ai-service)
+
+- **RELEASE-NOTES-v1.1.0-sprint4.md** — release summary với highlights,
+  migration guide, known limitations
 
 - **SLA Monitor (A7)** — background loop + admin trigger
   - `POST /admin/sla/check` — manual trigger (admin/manager)
@@ -50,22 +65,16 @@ Sprint 4 — ticket workflow completion, audit trail, outbox pattern, test cover
   - Hybrid: tries AI first (5s timeout), falls back to rule-based
   - Confidence: 0-100 (AI scale) or 0-1 (rule-based scale)
 
-- **Test Coverage** — 69 unit tests (54 → 69)
+- **Test Coverage** — 97 unit tests (69 → 97)
   - test_ai_classifier.py (16): category, priority, cache, fallback
   - test_outbox.py (7): backoff schedule, call_n8n with mocked httpx
   - test_notes.py (10): Pydantic validation, STAFF_ROLES constant
   - test_sla_monitor.py (9): SLA rules, deadline computation
   - test_admin.py (9): auth/role checks on admin endpoints
   - test_history.py (15): response shape, permission matrix, pagination
+  - test_metrics.py (28): A10 dashboard KPI endpoint
   - test_tickets.py (3): health, list, create with role
   - conftest.py: AsyncClient + ASGITransport, mock get_current_user
-
-- **CI Pipeline** — full GitHub Actions workflow
-  - 6 jobs: lint-python, lint-frontend, test-ticket-service (with Postgres
-    service), test-ai-service, test-frontend, secret-scan (TruffleHog)
-  - Concurrency: cancel in-progress on same branch
-  - Triggers: push + PR to main/develop
-  - YAML validated against GitHub Actions schema
 
 ### Changed
 
