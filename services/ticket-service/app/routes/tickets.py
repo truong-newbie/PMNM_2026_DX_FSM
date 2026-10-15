@@ -17,6 +17,7 @@ from app.models.user import User
 from app.config import get_settings
 from app.core.security import get_current_user, TokenUser
 from app.services.n8n_dispatcher import dispatch_ticket_created
+from app.services.ai_classifier import classify_ticket, AIClassifyResponse
 
 settings = get_settings()
 router = APIRouter()
@@ -213,25 +214,8 @@ def _build_ticket_response(ticket: Ticket) -> TicketResponse:
 
 
 async def _call_ai_classify(title: str, description: str) -> AIClassifyResponse:
-    """Gọi ai-service /classify. Fallback rule-based nếu ai-service down."""
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                f"{settings.ai_service_url}/classify",
-                json={"title": title, "description": description or ""},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return AIClassifyResponse(**data)
-    except Exception:
-        # AI unavailable → rule-based fallback cứng
-        return AIClassifyResponse(
-            category="other",
-            priority="medium",
-            confidence=0.0,
-            recommendation="AI unavailable – please review manually.",
-            method="fallback",
-        )
+    """Wrapper gọi ai_classifier service. Có cache, AI call, rule-based fallback."""
+    return await classify_ticket(title, description or "")
 
 
 async def _dispatch_n8n_webhook(ticket_id: UUID, ticket_number: str):
