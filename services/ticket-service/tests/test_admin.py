@@ -70,31 +70,36 @@ async def test_outbox_run_as_customer_forbidden(client, customer_user):
 
 @pytest.mark.asyncio
 async def test_list_outbox_as_admin(client, admin_user):
-    """Admin GET outbox events → 200. Skip nếu DB issue (event loop mismatch)."""
+    """Admin GET outbox events → 200, list.
+
+    Note: Skip nếu "different loop" (xem comment ở test_tickets.py).
+    """
     try:
         resp = await client.get("/admin/outbox?limit=10")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
+        if len(data) > 0:
+            ev = data[0]
+            assert "id" in ev
+            assert "event_type" in ev
+            assert "status" in ev
+            assert "attempts" in ev
+            assert "payload" in ev
     except RuntimeError as e:
         if "different loop" in str(e):
-            pytest.skip(f"DB session loop mismatch in test env: {e}")
+            pytest.skip(f"DB session loop mismatch: {e}")
         raise
 
 
 @pytest.mark.asyncio
 async def test_list_outbox_filter_by_status(client, admin_user):
-    """Filter by status=pending → chỉ trả pending events. Skip nếu DB loop mismatch."""
-    try:
-        resp = await client.get("/admin/outbox?status=pending&limit=50")
-        assert resp.status_code == 200
-        data = resp.json()
-        for ev in data:
-            assert ev["status"] == "pending"
-    except RuntimeError as e:
-        if "different loop" in str(e):
-            pytest.skip(f"DB session loop mismatch: {e}")
-        raise
+    """Filter by status=pending → chỉ trả pending events."""
+    resp = await client.get("/admin/outbox?status=pending&limit=50")
+    assert resp.status_code == 200
+    data = resp.json()
+    for ev in data:
+        assert ev["status"] == "pending"
 
 
 @pytest.mark.asyncio

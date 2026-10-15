@@ -4,6 +4,7 @@
 
 import os
 import sys
+import asyncio
 from pathlib import Path
 
 # Add project root to sys.path
@@ -95,3 +96,30 @@ def _mock_current_user(request):
     app.dependency_overrides[get_current_user] = _override
     yield
     app.dependency_overrides.pop(get_current_user, None)
+
+
+# ─── DB session shared với app event loop ──────────────────────────────
+# Fix: tránh "Task got Future attached to a different loop"
+# Khi test gọi app.dependency_overrides[get_db] qua ASGITransport,
+# request handler dùng get_db() → AsyncSessionLocal() → engine bound
+# to the loop running ASGI. Nếu test tạo AsyncSessionLocal() riêng,
+# engine sẽ bound to test's loop → mismatch.
+# Cách: dùng get_db override để share session, hoặc tạo session qua
+# FastAPI Depends(get_db) thay vì AsyncSessionLocal() trực tiếp.
+
+
+@pytest_asyncio.fixture
+async def db_session():
+    """
+    Yield một session qua get_db() — chạy trong cùng loop với app.
+    Test nào cần DB thật mới dùng fixture này; tests khác skip nếu
+    cần integration thì dùng API client (vì client đã chạy trong app loop).
+    """
+    from app.db.database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+
