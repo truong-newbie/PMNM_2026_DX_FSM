@@ -2,9 +2,9 @@
 
 ## Tổng quan kiến trúc
 
-DX-FSM là nền tảng quản lý dịch vụ thực địa (Field Service Management) được thiết kế theo mô hình Open-Core với 4 tầng.
+DX-FSM là nền tảng quản lý dịch vụ thực địa (Field Service Management) được thiết kế theo mô hình Open-Core với 3 tầng.
 
-## Mô hình 4 tầng
+## Mô hình 3 tầng
 
 ### Tầng 1: Open-Core (Headless)
 Infrastructure và services nền tảng, không có UI.
@@ -12,37 +12,34 @@ Infrastructure và services nền tảng, không có UI.
 | Component | Technology | Port |
 |---|---|---|
 | Keycloak | SSO/Identity | 8080 |
-| APISIX | API Gateway | 8080/80 |
+| nginx | API Gateway | 80 |
 | PostgreSQL | Database | 5432 |
-| MinIO | Object Storage | 9000/9001 |
+| MinIO | Object Storage | 9000/9001 (disabled) |
 | n8n | Workflow Automation | 5678 |
 
 ### Tầng 2: H-P-D-I (Service Tier)
 Các microservice xử lý nghiệp vụ.
 
-- `ticket-service` (port 8001) – Core CRUD cho tickets, users
-- `ai-service` (port 8002) – AI classification (rule-based + Ollama)
+- `ticket-service` (port 8001) – Core CRUD cho tickets, users, AI classification
+- `ai-service` (port 8002) – AI inference (rule-based + Ollama)
 - `notification-service` (port 8003) – Notifications
 
 ### Tầng 3: User Interface (Open-Core Frontend)
-React SPA cho user tương tác.
-
-### Tầng 4: Intelligence
-Các module AI/ML cho phân loại tự động.
+React 18 SPA cho user tương tác.
 
 ## Cách khởi động
 
 ```bash
-cd dx-fsm
+# Build và chạy toàn bộ (khuyến nghị)
+docker compose up -d --build
 
-# Build và chạy toàn bộ
-docker compose up -d
+# Chỉ infrastructure + gateway
+docker compose up -d postgres keycloak gateway n8n
 
-# Chỉ Open-Core
-docker compose -f docker-compose.yml -f docker-compose.core.yml up -d
-
-# Chỉ services
-docker compose -f docker-compose.yml -f docker-compose.services.yml up -d
+# Smoke test
+curl http://localhost/health
+curl http://localhost/api/v1/tickets
+curl http://localhost:8080/realms/dx-fsm/.well-known/openid-configuration
 ```
 
 ## Cấu trúc thư mục
@@ -51,20 +48,20 @@ docker compose -f docker-compose.yml -f docker-compose.services.yml up -d
 dx-fsm/
 ├── core/                   # Tầng 1: Open-Core
 │   ├── keycloak/          # Realm configuration + JSON
-│   ├── apisix/            # Gateway config
-│   ├── postgres/           # Schema + seed data
-│   ├── minio/             # Storage init
+│   ├── nginx/             # Gateway config (thay APISIX)
+│   ├── postgres/          # Schema + seed data
+│   ├── minio/             # Storage init (disabled trong compose)
 │   └── n8n/               # Workflow JSON exports
 ├── services/               # Tầng 2: H-P-D-I
 │   ├── ticket-service/     # FastAPI + SQLAlchemy + asyncpg
 │   ├── ai-service/        # FastAPI + Ollama
 │   └── notification-service/
-├── app/                   # Tầng 3: React Frontend
+├── app/                   # Tầng 3: React 18 Frontend
 │   └── src/
 │       ├── pages/
 │       ├── components/
 │       └── lib/
-├── docs/                  # Tầng 4: Documentation
+├── docs/                  # Documentation
 └── docker-compose.yml
 ```
 
@@ -84,7 +81,7 @@ Views cho dashboard:
 
 ## AI Integration
 
-AI service có 2 lớp:
+ai-service có 2 lớp:
 1. **Rule-based** (luôn hoạt động) – keyword matching
 2. **Ollama** (tùy chọn) – LLM inference qua local
 

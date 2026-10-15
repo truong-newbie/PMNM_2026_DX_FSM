@@ -38,53 +38,42 @@ services:
       - ./core/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     ports:
       - "8080:8080"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
+    # Keycloak 24.0 base image không có curl/wget/bash.
+    # Bỏ healthcheck — Docker vẫn chạy container, không restart loop.
     networks:
       - dxfsm-net
 
-  apisix:
-    image: apache/apisix:3.9-debian
-    container_name: dxfsm-apisix
+  gateway:
+    # Thay thế APISIX (apache/apisix image bị Docker Hub proxy chặn).
+    # Nginx alpine nằm trong library/* → pull OK.
+    # Routing tương đương core/apisix/routes.yaml, xem core/nginx/nginx.conf.
+    image: nginx:1.27-alpine
+    container_name: dxfsm-gateway
     restart: unless-stopped
     depends_on:
-      - etcd
-    environment:
-      APISIX_ADMIN_KEY: ${APISIX_ADMIN_KEY:-edf8c0f0db0c4a9e8f7d6b5a4c3e2f10}
+      - ticket-service
+      - ai-service
+      - notification-service
     volumes:
-      - ./core/apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro
-      - ./core/apisix/routes.yaml:/usr/local/apisix/conf/routes.yaml:ro
+      - ./core/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
-      - "9180:9180"  # Admin API
-      - "80:8080"    # Proxy
+      - "80:80"       # Public API gateway (thay cho 8080 cũ)
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9180/apisix/admin/health"]
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/health"]
       interval: 15s
       timeout: 5s
       retries: 3
     networks:
       - dxfsm-net
 
-  etcd:
-    image: apache/apisix-etcd:3.5-debian
-    container_name: dxfsm-etcd
-    restart: unless-stopped
-    environment:
-      ETCD_NAME: etcd
-      ETCD_ADVERTISE_CLIENT_URLS: http://0.0.0.0:2379
-      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
-    volumes:
-      - etcd_data:/etcd
-    networks:
-      - dxfsm-net
-
   minio:
-    image: minio/server:RELEASE.2024-11-07T00-52-20Z
+    # DISABLED Day 0: minio/minio image bị Docker Hub proxy chặn (whitelist).
+    # Giữ comment để nhớ tích hợp lại khi có image access. Trong thời gian đó
+    # ticket-service dùng local filesystem (volume) để lưu attachment.
+    image: minio/minio:latest
     container_name: dxfsm-minio
-    restart: unless-stopped
+    profiles: ["disabled"]
+    restart: "no"
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -95,11 +84,6 @@ services:
     ports:
       - "9000:9000"   # API
       - "9001:9001"   # Console
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     networks:
       - dxfsm-net
 
@@ -138,7 +122,9 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://dxfsm:changeme_postgres_123@postgres:5432/dxfsm
-      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_PUBLIC_URL: http://localhost:8080
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+      KEYCLOAK_CLIENT_ID: dx-fsm-api
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: changeme_minio_123
@@ -149,10 +135,11 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\""]
       interval: 15s
       timeout: 5s
       retries: 3
+      start_period: 15s
     networks:
       - dxfsm-net
 
@@ -169,10 +156,11 @@ services:
     ports:
       - "8002:8002"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8002/health')\""]
       interval: 15s
       timeout: 5s
       retries: 3
+      start_period: 30s
     networks:
       - dxfsm-net
 
@@ -185,10 +173,11 @@ services:
     ports:
       - "8003:8003"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8003/health')\""]
       interval: 15s
       timeout: 5s
       retries: 3
+      start_period: 15s
     networks:
       - dxfsm-net
 
@@ -208,9 +197,9 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - apisix
+      - gateway
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -221,7 +210,6 @@ services:
 
 volumes:
   postgres_data:
-  etcd_data:
   minio_data:
   n8n_data:
 

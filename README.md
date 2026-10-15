@@ -5,7 +5,7 @@
 ![Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue)
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ed)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776ab)
-![Vue](https://img.shields.io/badge/Vue-3-4fc08d)
+![React](https://img.shields.io/badge/React-18-61dafb)
 
 ## Mục lục
 
@@ -26,9 +26,9 @@
 
 DX-FSM là hệ thống quản lý dịch vụ thực địa, được xây dựng theo kiến trúc **DX-OS Open-Core 3 tầng**:
 
-- **Tầng 1 – Open-Core (Headless):** Keycloak, APISIX, PostgreSQL, MinIO, n8n
+- **Tầng 1 – Open-Core (Headless):** Keycloak, nginx, PostgreSQL, MinIO (disabled), n8n
 - **Tầng 2 – H-P-D-I:** Không gian Human, Process, Data, Intelligence
-- **Tầng 3 – Ứng dụng:** Vue 3 SPA cho Customer, Technician, Manager
+- **Tầng 3 – Ứng dụng:** React 18 SPA cho Customer, Technician, Manager
 
 Bài toán: Doanh nghiệp cung cấp dịch vụ kỹ thuật (lắp đặt, bảo trì, sửa chữa) cần một nền tảng thống nhất thay thế Excel và tin nhắn rời rạc.
 
@@ -38,17 +38,17 @@ Bài toán: Doanh nghiệp cung cấp dịch vụ kỹ thuật (lắp đặt, b�
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                   TẦNG 3: ỨNG DỤNG NGHIỆP VỤ              │
+│                   TẦNG 3: ỨNG DỤNG NGHIỆP VỤ             │
 │  Customer App │ KTV Mobile │ Manager Dashboard              │
-│                    (Vue 3 SPA)                              │
+│                    (React 18 SPA)                           │
 ├─────────────────────────────┬───────────────────────────────┤
 │        TẦNG 2: H-P-D-I    │                               │
 │  H: User/Profile           │ P: Ticket Workflow            │
 │  D: Dashboard/KPI         │ I: AI Classify/Recommend      │
 ├─────────────────────────────┴───────────────────────────────┤
 │                    TẦNG 1: DX-OS OPEN-CORE (HEADLESS)       │
-│  Keycloak (SSO) │ APISIX (Gateway) │ PostgreSQL (DB)     │
-│  MinIO (Files) │ n8n (Workflow) │ Ollama (AI)            │
+│  Keycloak (SSO) │ nginx (Gateway) │ PostgreSQL (DB)     │
+│  MinIO (Files, disabled) │ n8n (Workflow) │ Ollama (AI)  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -60,11 +60,11 @@ Xem chi tiết: [docs/docs/architecture/overview.md](docs/docs/architecture/over
 
 ### Tầng 1 – Open-Core
 - [x] **Identity/SSO** với Keycloak – JWT token, RBAC
-- [x] **API Gateway** với Apache APISIX – routing, auth, rate limit
+- [x] **API Gateway** với nginx – routing, proxy
 - [x] **Database** PostgreSQL – dữ liệu quan hệ
-- [x] **File Storage** với MinIO – ảnh hiện trường
+- [x] **File Storage** – MinIO (disabled, fallback filesystem)
 - [x] **Workflow Engine** với n8n – ticket intake → assign → process → close
-- [x] **AI Service** với Ollama – phân loại ticket tự động
+- [x] **AI Service** – phân loại ticket tự động (rule-based + Ollama)
 
 ### Tầng 2 – H-P-D-I
 - [x] **H – Human:** Quản lý user, profile, team
@@ -84,13 +84,13 @@ Xem chi tiết: [docs/docs/architecture/overview.md](docs/docs/architecture/over
 | Thành phần | Công nghệ | Giấy phép |
 |---|---|---|
 | Identity/SSO | Keycloak | Apache-2.0 |
-| API Gateway | Apache APISIX | Apache-2.0 |
+| API Gateway | nginx | BSD |
 | Database | PostgreSQL 16 | PostgreSQL |
-| File Storage | MinIO | AGPL-3.0 |
+| File Storage | Local filesystem (MinIO disabled) | – |
 | Workflow | n8n | Elastic-2.0 |
 | Backend API | FastAPI (Python 3.11) | MIT |
 | AI Service | Ollama + Llama 3.2 | MIT |
-| Frontend | Vue 3 + Vite + TypeScript | MIT |
+| Frontend | React 18 + Vite + TypeScript | MIT |
 | Orchestration | Docker Compose | Apache-2.0 |
 
 Xem chi tiết: [DEPENDENCIES.md](DEPENDENCIES.md)
@@ -110,29 +110,20 @@ Xem chi tiết: [DEPENDENCIES.md](DEPENDENCIES.md)
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/<team>/dx-fsm.git
-cd dx-fsm
+git clone https://github.com/truong-newbie/PMNM_2026_DX_FSM.git
+cd PMNM_2026_DX_FSM
 
-# 2. Copy env file
-cp .env.example .env
+# 2. Build và chạy toàn bộ
+docker compose up -d --build
 
-# 3. (Tùy chọn) Chỉnh sửa .env nếu cần
-# Mặc định đã đủ cho demo
-
-# 4. Khởi động toàn bộ hệ thống
-docker compose up -d
-
-# 5. Đợi services khởi động (~2-3 phút)
-# Kiểm tra trạng thái:
+# 3. Đợi services khởi động (~2-3 phút)
 docker compose ps
 
-# 6. Truy cập các service
-# Frontend:      http://localhost:3000
-# Keycloak:       http://localhost:8080/auth (admin/admin123)
-# API Docs:       http://localhost:8000/docs
-# n8n Workflow:  http://localhost:5678
-# MinIO Console:  http://localhost:9001 (minioadmin/minioadmin)
-# Grafana:       http://localhost:3001 (admin/admin123)
+# 4. Truy cập các service
+# Frontend:       http://localhost:3000
+# API Gateway:    http://localhost/api/v1/tickets
+# Keycloak:       http://localhost:8080/realms/dx-fsm
+# n8n Workflow:   http://localhost:5678
 ```
 
 ### Build từ source
@@ -143,7 +134,7 @@ cd services/ticket-service
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8001
 
-# Frontend (Vue 3)
+# Frontend (React 18)
 cd app
 npm install
 npm run dev
@@ -160,10 +151,10 @@ uvicorn app.main:app --reload --port 8002
 
 | Role | Username | Password | Mô tả |
 |---|---|---|---|
-| Customer | `customer@haui.vn` | `customer123` | Tạo ticket, theo dõi trạng thái |
-| Technician | `technician@haui.vn` | `tech123` | Nhận, xử lý, đóng ticket |
-| Manager | `manager@haui.vn` | `manager123` | Dashboard, phân công thủ công |
-| Admin | `admin@haui.vn` | `admin123` | Quản trị Keycloak |
+| Customer | `customer@haui.vn` | `<DEMO_PASSWORD>` | Tạo ticket, theo dõi trạng thái |
+| Technician | `technician@haui.vn` | `<DEMO_PASSWORD>` | Nhận, xử lý, đóng ticket |
+| Manager | `manager@haui.vn` | `<DEMO_PASSWORD>` | Dashboard, phân công thủ công |
+| Admin | `admin@haui.vn` | `<DEMO_PASSWORD>` | Quản trị Keycloak |
 
 ---
 
@@ -173,15 +164,15 @@ uvicorn app.main:app --reload --port 8002
 dx-fsm/
 ├── core/                    # Tầng 1: Open-Core (Headless)
 │   ├── keycloak/          # SSO + RBAC
-│   ├── apisix/            # API Gateway
-│   ├── postgres/          # Database schema
-│   ├── minio/             # File storage
-│   └── n8n/               # Workflow engine
+│   ├── nginx/              # API Gateway (thay APISIX)
+│   ├── postgres/            # Database schema
+│   ├── minio/              # File storage (disabled)
+│   └── n8n/                # Workflow engine
 ├── services/               # Tầng 2: Microservices
-│   ├── ticket-service/    # Core API (FastAPI)
-│   ├── ai-service/        # AI/ML (FastAPI + Ollama)
+│   ├── ticket-service/     # Core API (FastAPI)
+│   ├── ai-service/         # AI/ML (FastAPI + Ollama)
 │   └── notification-service/
-├── app/                   # Tầng 3: Vue 3 Frontend
+├── app/                   # Tầng 3: React 18 Frontend
 ├── docs/                  # Tài liệu Docusaurus
 ├── scripts/               # Utility scripts
 └── docker-compose.yml    # Orchestration

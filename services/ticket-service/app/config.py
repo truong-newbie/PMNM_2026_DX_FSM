@@ -10,8 +10,14 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://dxfsm:changeme@postgres:5432/dxfsm"
 
     # Keycloak
-    keycloak_url: str = "http://keycloak:8080"
+    # keycloak_public_url: dùng cho issuer verify (phải khớp với iss trong JWT)
+    # keycloak_internal_url: dùng để fetch JWKS từ Docker network
+    keycloak_public_url: str = "http://localhost:8080"
+    keycloak_internal_url: str = "http://keycloak:8080"
     keycloak_realm: str = "dx-fsm"
+    # Client ID cho audience verify; secret chỉ cần cho service-to-service call,
+    # JWT verify dùng public key từ JWKS nên KHÔNG cần secret trong code
+    keycloak_client_id: str = "dx-fsm-api"
 
     # MinIO
     minio_endpoint: str = "minio:9000"
@@ -39,3 +45,7 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
+
+
+# Module-level singleton – dùng trực tiếp trong các file import
+settings = get_settings()

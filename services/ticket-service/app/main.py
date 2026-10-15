@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db.database import init_db
-from app.routes import tickets, users, auth, health
+from app.routes import tickets, users, auth, health, comments, attachments
 
 app = FastAPI(
     title="DX-FSM Ticket Service",
@@ -36,6 +36,8 @@ async def startup():
 app.include_router(health.router, prefix="/health", tags=["Health"])
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(tickets.router, prefix="/tickets", tags=["Tickets"])
+app.include_router(comments.router, tags=["Comments"])
+app.include_router(attachments.router, tags=["Attachments"])
 app.include_router(users.router, prefix="/users", tags=["Users"])
 
 

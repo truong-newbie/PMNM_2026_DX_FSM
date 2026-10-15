@@ -298,9 +298,9 @@ INSERT INTO users (keycloak_id, username, email, full_name, role, phone, departm
 -- ============================================================
 
 INSERT INTO technicians (user_id, employee_code, specialty, experience_years, max_concurrent_tickets, location) VALUES
-  ((SELECT id FROM users WHERE username = 'technician'), 'TECH001', ARRAY['hardware', 'electrical'], 5, 8, 'Hà Nội'),
-  ((SELECT id FROM users WHERE username = 'tech2'), 'TECH002', ARRAY['software', 'network'], 3, 6, 'Hà Nội'),
-  ((SELECT id FROM users WHERE username = 'tech3'), 'TECH003', ARRAY['network', 'hardware'], 4, 7, 'Hà Nội');
+  ((SELECT id FROM users WHERE username = 'technician'), 'TECH001', ARRAY['hardware', 'electrical']::ticket_category[], 5, 8, 'Hà Nội'),
+  ((SELECT id FROM users WHERE username = 'tech2'), 'TECH002', ARRAY['software', 'network']::ticket_category[], 3, 6, 'Hà Nội'),
+  ((SELECT id FROM users WHERE username = 'tech3'), 'TECH003', ARRAY['network', 'hardware']::ticket_category[], 4, 7, 'Hà Nội');
 
 -- ============================================================
 -- SEED DATA: 50 Sample Tickets

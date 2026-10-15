@@ -26,4 +26,4 @@ Import tự động qua `realm-export.json` khi container khởi động.
 ## Admin Console
 
 URL: http://localhost:8080/auth/admin
-User: admin / admin123
+User: admin / <DEMO_PASSWORD>

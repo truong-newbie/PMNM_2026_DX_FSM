@@ -4,11 +4,40 @@
 from datetime import datetime
 from uuid import UUID
 from typing import Optional
-from sqlalchemy import Column, String, Text, Enum, ForeignKey, DateTime, Numeric, Boolean, ARRAY
+import enum
+from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Numeric, Boolean, ARRAY, BigInteger, Enum as SQLAlchemyEnum
 from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB
 from sqlalchemy.sql import func
 
 from app.db.database import Base
+
+
+# Python enums khớp với PostgreSQL ENUM types.
+# create_type=False: DB đã có sẵn type, không tạo lại khi init.
+
+class TicketStatusEnum(str, enum.Enum):
+    new = "new"
+    assigned = "assigned"
+    in_progress = "in_progress"
+    pending = "pending"
+    resolved = "resolved"
+    closed = "closed"
+    cancelled = "cancelled"
+
+
+class TicketPriorityEnum(str, enum.Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+    critical = "critical"
+
+
+class TicketCategoryEnum(str, enum.Enum):
+    hardware = "hardware"
+    software = "software"
+    network = "network"
+    electrical = "electrical"
+    other = "other"
 
 
 class Ticket(Base):
@@ -18,9 +47,21 @@ class Ticket(Base):
     ticket_number = Column(String(20), unique=True, nullable=False)
     title = Column(String(500), nullable=False)
     description = Column(Text)
-    category = Column(String(50), nullable=False, default="other")
-    priority = Column(String(20), nullable=False, default="medium")
-    status = Column(String(50), nullable=False, default="new")
+    category = Column(
+        SQLAlchemyEnum(TicketCategoryEnum, name="ticket_category", create_type=False),
+        nullable=False,
+        default=TicketCategoryEnum.other,
+    )
+    priority = Column(
+        SQLAlchemyEnum(TicketPriorityEnum, name="ticket_priority", create_type=False),
+        nullable=False,
+        default=TicketPriorityEnum.medium,
+    )
+    status = Column(
+        SQLAlchemyEnum(TicketStatusEnum, name="ticket_status", create_type=False),
+        nullable=False,
+        default=TicketStatusEnum.new,
+    )
 
     customer_id = Column(PGUUID(as_uuid=True), nullable=False)
     customer_name = Column(String(255))
@@ -67,7 +108,7 @@ class TicketAttachment(Base):
     user_id = Column(PGUUID(as_uuid=True), nullable=False)
     file_name = Column(String(255), nullable=False)
     file_path = Column(Text, nullable=False)
-    file_size = Column(PGUUID)
+    file_size = Column(BigInteger)
     mime_type = Column(String(100))
     minio_object_name = Column(String(500))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -82,5 +123,5 @@ class TicketHistory(Base):
     action = Column(String(100), nullable=False)
     old_value = Column(Text)
     new_value = Column(Text)
-    metadata = Column(JSONB)
+    extra_data = Column(JSONB)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
