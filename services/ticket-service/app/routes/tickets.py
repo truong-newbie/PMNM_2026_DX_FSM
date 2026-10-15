@@ -16,6 +16,7 @@ from app.models.ticket import Ticket, TicketHistory
 from app.models.user import User
 from app.config import get_settings
 from app.core.security import get_current_user, TokenUser
+from app.services.n8n_dispatcher import dispatch_ticket_created
 
 settings = get_settings()
 router = APIRouter()
@@ -234,15 +235,8 @@ async def _call_ai_classify(title: str, description: str) -> AIClassifyResponse:
 
 
 async def _dispatch_n8n_webhook(ticket_id: UUID, ticket_number: str):
-    """Gọi n8n webhook khi ticket được tạo. Fail silently."""
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            await client.post(
-                f"{settings.n8n_webhook_url}/ticket-created",
-                json={"ticket_id": str(ticket_id), "ticket_number": ticket_number},
-            )
-    except Exception:
-        pass  # n8n webhook failure không block ticket creation
+    """Gọi n8n webhook khi ticket được tạo. Fail silently — delegated to dispatcher."""
+    await dispatch_ticket_created(str(ticket_id), ticket_number)
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────
