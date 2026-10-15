@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db.database import init_db
-from app.routes import tickets, users, auth, health, comments, attachments, admin, notes, history
+from app.routes import tickets, users, auth, health, comments, attachments, admin, notes, history, metrics
 from app.services.sla_monitor import sla_monitor_loop, SCAN_INTERVAL_SEC
 from app.services.outbox_dispatcher import outbox_worker_loop, WORKER_INTERVAL_SEC
 
@@ -83,6 +83,7 @@ app.include_router(comments.router, tags=["Comments"])
 app.include_router(attachments.router, tags=["Attachments"])
 app.include_router(notes.router, tags=["Internal Notes"])
 app.include_router(history.router, tags=["History"])
+app.include_router(metrics.router, tags=["Metrics"])
 app.include_router(users.router, prefix="/users", tags=["Users"])
 app.include_router(admin.router, tags=["Admin"])
 
