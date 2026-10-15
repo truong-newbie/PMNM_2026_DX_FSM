@@ -13,35 +13,47 @@ from app.config import settings
 from app.db.database import init_db
 from app.routes import tickets, users, auth, health, comments, attachments, admin
 from app.services.sla_monitor import sla_monitor_loop, SCAN_INTERVAL_SEC
+from app.services.outbox_dispatcher import outbox_worker_loop, WORKER_INTERVAL_SEC
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Quản lý startup/shutdown: init DB + start SLA background monitor."""
+    """Quản lý startup/shutdown: init DB + start background tasks."""
     await init_db()
 
-    # Start SLA monitor background task
-    stop_event = asyncio.Event()
-    task = asyncio.create_task(
-        sla_monitor_loop(stop_event, interval_sec=SCAN_INTERVAL_SEC)
+    # Start SLA monitor
+    sla_stop = asyncio.Event()
+    sla_task = asyncio.create_task(
+        sla_monitor_loop(sla_stop, interval_sec=SCAN_INTERVAL_SEC)
     )
-    app.state.sla_stop = stop_event
-    app.state.sla_task = task
+    app.state.sla_stop = sla_stop
+    app.state.sla_task = sla_task
     logger.info(f"SLA monitor scheduled (interval={SCAN_INTERVAL_SEC}s)")
+
+    # Start Outbox worker
+    outbox_stop = asyncio.Event()
+    outbox_task = asyncio.create_task(
+        outbox_worker_loop(outbox_stop, interval_sec=WORKER_INTERVAL_SEC)
+    )
+    app.state.outbox_stop = outbox_stop
+    app.state.outbox_task = outbox_task
+    logger.info(f"Outbox worker scheduled (interval={WORKER_INTERVAL_SEC}s)")
 
     try:
         yield
     finally:
         # Graceful shutdown
-        stop_event.set()
-        try:
-            await asyncio.wait_for(task, timeout=5.0)
-        except asyncio.TimeoutError:
-            task.cancel()
-            logger.warning("SLA monitor task force-cancelled")
-        logger.info("SLA monitor stopped")
+        sla_stop.set()
+        outbox_stop.set()
+        for task in (sla_task, outbox_task):
+            try:
+                await asyncio.wait_for(task, timeout=5.0)
+            except asyncio.TimeoutError:
+                task.cancel()
+                logger.warning("Background task force-cancelled")
+        logger.info("Background workers stopped")
 
 
 app = FastAPI(

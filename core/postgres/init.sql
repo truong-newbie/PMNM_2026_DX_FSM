@@ -126,6 +126,25 @@ CREATE TABLE ticket_history (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Outbox events (Sprint 4 - A8)
+-- Lưu trữ webhook events cần dispatch đến n8n với retry logic.
+-- Worker scan WHERE status='pending' AND next_retry_at <= NOW()
+CREATE TABLE outbox_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_type VARCHAR(64) NOT NULL,
+  payload JSONB NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'pending',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 5,
+  last_error TEXT,
+  next_retry_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  sent_at TIMESTAMP WITH TIME ZONE,
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX ix_outbox_status_next_retry ON outbox_events(status, next_retry_at);
+
 -- Notifications
 CREATE TABLE notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

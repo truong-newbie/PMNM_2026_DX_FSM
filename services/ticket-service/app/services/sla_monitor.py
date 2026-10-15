@@ -86,21 +86,24 @@ async def run_sla_check_once() -> dict:
             summary["errors"] += 1
             return summary
 
-        # Dispatch webhook NGOÀI transaction (best-effort)
+        # Enqueue n8n event vào outbox (atomic với mark_sla_breached)
         for t in overdue:
             try:
-                ok = await dispatch_sla_breach(
+                await dispatch_sla_breach(
+                    db=db,
                     ticket_id=str(t.id),
                     ticket_number=t.ticket_number,
                     title=t.title,
                     priority=str(t.priority.value if hasattr(t.priority, "value") else t.priority),
                     sla_deadline=t.sla_deadline.isoformat() if t.sla_deadline else None,
                 )
-                if ok:
-                    summary["dispatched"] += 1
+                summary["dispatched"] += 1
             except Exception as e:
-                logger.warning(f"n8n dispatch failed for {t.ticket_number}: {e}")
+                logger.warning(f"outbox enqueue failed for {t.ticket_number}: {e}")
                 summary["errors"] += 1
+
+        # Commit enqueues
+        await db.commit()
 
     return summary
 

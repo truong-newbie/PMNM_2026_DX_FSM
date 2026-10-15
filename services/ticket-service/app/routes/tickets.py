@@ -218,9 +218,12 @@ async def _call_ai_classify(title: str, description: str) -> AIClassifyResponse:
     return await classify_ticket(title, description or "")
 
 
-async def _dispatch_n8n_webhook(ticket_id: UUID, ticket_number: str):
-    """Gọi n8n webhook khi ticket được tạo. Fail silently — delegated to dispatcher."""
-    await dispatch_ticket_created(str(ticket_id), ticket_number)
+async def _dispatch_n8n_webhook(db: AsyncSession, ticket_id: UUID, ticket_number: str):
+    """
+    Enqueue n8n event vào outbox (cùng transaction với ticket creation).
+    Background worker sẽ retry delivery nếu n8n down.
+    """
+    await dispatch_ticket_created(db, str(ticket_id), ticket_number)
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────
@@ -373,7 +376,6 @@ async def get_ticket(
 @router.post("", response_model=TicketResponse, status_code=201)
 async def create_ticket(
     ticket_data: TicketCreate,
-    background_tasks: BackgroundTasks,
     user: TokenUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -438,13 +440,11 @@ async def create_ticket(
     )
     db.add(history)
 
+    # 6. Enqueue n8n event (cùng transaction — atomic với ticket)
+    await _dispatch_n8n_webhook(db, ticket.id, ticket.ticket_number)
+
     await db.commit()
     await db.refresh(ticket)
-
-    # 6. Dispatch n8n webhook (background, non-blocking)
-    background_tasks.add_task(
-        _dispatch_n8n_webhook, ticket.id, ticket.ticket_number
-    )
 
     return _build_ticket_response(ticket)
 
