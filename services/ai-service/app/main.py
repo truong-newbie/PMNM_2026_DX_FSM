@@ -7,7 +7,7 @@ from app.routes import classify, recommend, health
 app = FastAPI(
     title="DX-FSM AI Service",
     description="AI-powered ticket classification and technician recommendation",
-    version="1.0.0",
+    version="1.1.0",
     docs_url="/docs",
 )
 
@@ -18,4 +18,4 @@ app.include_router(recommend.router, prefix="/recommend", tags=["Recommendation"
 
 @app.get("/")
 async def root():
-    return {"service": "DX-FSM AI Service", "version": "1.0.0", "status": "running"}
+    return {"service": "DX-FSM AI Service", "version": "1.1.0", "status": "running"}

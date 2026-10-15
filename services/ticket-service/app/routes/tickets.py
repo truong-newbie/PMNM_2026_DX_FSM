@@ -16,6 +16,8 @@ from app.models.ticket import Ticket, TicketHistory
 from app.models.user import User
 from app.config import get_settings
 from app.core.security import get_current_user, TokenUser
+from app.services.n8n_dispatcher import dispatch_ticket_created
+from app.services.ai_classifier import classify_ticket, AIClassifyResponse
 
 settings = get_settings()
 router = APIRouter()
@@ -212,37 +214,16 @@ def _build_ticket_response(ticket: Ticket) -> TicketResponse:
 
 
 async def _call_ai_classify(title: str, description: str) -> AIClassifyResponse:
-    """Gọi ai-service /classify. Fallback rule-based nếu ai-service down."""
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                f"{settings.ai_service_url}/classify",
-                json={"title": title, "description": description or ""},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return AIClassifyResponse(**data)
-    except Exception:
-        # AI unavailable → rule-based fallback cứng
-        return AIClassifyResponse(
-            category="other",
-            priority="medium",
-            confidence=0.0,
-            recommendation="AI unavailable – please review manually.",
-            method="fallback",
-        )
+    """Wrapper gọi ai_classifier service. Có cache, AI call, rule-based fallback."""
+    return await classify_ticket(title, description or "")
 
 
-async def _dispatch_n8n_webhook(ticket_id: UUID, ticket_number: str):
-    """Gọi n8n webhook khi ticket được tạo. Fail silently."""
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            await client.post(
-                f"{settings.n8n_webhook_url}/ticket-created",
-                json={"ticket_id": str(ticket_id), "ticket_number": ticket_number},
-            )
-    except Exception:
-        pass  # n8n webhook failure không block ticket creation
+async def _dispatch_n8n_webhook(db: AsyncSession, ticket_id: UUID, ticket_number: str):
+    """
+    Enqueue n8n event vào outbox (cùng transaction với ticket creation).
+    Background worker sẽ retry delivery nếu n8n down.
+    """
+    await dispatch_ticket_created(db, str(ticket_id), ticket_number)
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────
@@ -395,7 +376,6 @@ async def get_ticket(
 @router.post("", response_model=TicketResponse, status_code=201)
 async def create_ticket(
     ticket_data: TicketCreate,
-    background_tasks: BackgroundTasks,
     user: TokenUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -460,13 +440,11 @@ async def create_ticket(
     )
     db.add(history)
 
+    # 6. Enqueue n8n event (cùng transaction — atomic với ticket)
+    await _dispatch_n8n_webhook(db, ticket.id, ticket.ticket_number)
+
     await db.commit()
     await db.refresh(ticket)
-
-    # 6. Dispatch n8n webhook (background, non-blocking)
-    background_tasks.add_task(
-        _dispatch_n8n_webhook, ticket.id, ticket.ticket_number
-    )
 
     return _build_ticket_response(ticket)
 

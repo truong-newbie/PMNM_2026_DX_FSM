@@ -123,5 +123,5 @@ class TicketHistory(Base):
     action = Column(String(100), nullable=False)
     old_value = Column(Text)
     new_value = Column(Text)
-    extra_data = Column(JSONB)
+    metadata_json = Column("metadata", JSONB)  # align với column "metadata" trong DB
     created_at = Column(DateTime(timezone=True), server_default=func.now())

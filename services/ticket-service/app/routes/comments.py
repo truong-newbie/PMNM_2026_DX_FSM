@@ -5,15 +5,16 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select, cast, Text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_user, TokenUser
 from app.db.database import get_db
 from app.models.ticket import Ticket, TicketComment, TicketHistory
 from app.models.user import User
+from app.services.user_resolver import resolve_or_create_user
 
 router = APIRouter()
 
@@ -84,42 +85,8 @@ async def create_comment(
             detail="Internal comments are restricted to staff",
         )
 
-    # 3. Lookup or provision local user from keycloak_id (sub)
-    actor_id: Optional[UUID] = None
-    if user.sub:
-        result = await db.execute(
-            select(User.id).where(User.keycloak_id == user.sub)
-        )
-        actor_id = result.scalar_one_or_none()
-
-        if actor_id is None:
-            # Try to match by username as a fallback (legacy seed data)
-            result = await db.execute(
-                select(User.id).where(User.username == user.preferred_username)
-            )
-            legacy = result.scalar_one_or_none()
-            if legacy:
-                # Update legacy row to use real Keycloak sub
-                from sqlalchemy import update
-                await db.execute(
-                    update(User)
-                    .where(User.id == legacy)
-                    .values(keycloak_id=user.sub)
-                )
-                actor_id = legacy
-            else:
-                # Brand new user: auto-provision
-                role = user.role if user.role in ("admin", "manager", "technician", "customer") else "customer"
-                new_user = User(
-                    keycloak_id=user.sub,
-                    username=user.preferred_username or user.sub[:8],
-                    email=user.email,
-                    full_name=user.full_name,
-                    role=role,
-                )
-                db.add(new_user)
-                await db.flush()
-                actor_id = new_user.id
+    # 3. Resolve actor (dùng helper, logic đã tách sang user_resolver)
+    actor_id = await resolve_or_create_user(db, user)
 
     # 4. Create comment
     comment = TicketComment(
@@ -229,18 +196,8 @@ async def delete_comment(
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
 
-    # 2. Resolve actor
-    actor_id: Optional[UUID] = None
-    if user.sub:
-        result = await db.execute(
-            select(User.id).where(User.keycloak_id == user.sub)
-        )
-        actor_id = result.scalar_one_or_none()
-        if actor_id is None:
-            result = await db.execute(
-                select(User.id).where(User.username == user.preferred_username)
-            )
-            actor_id = result.scalar_one_or_none()
+    # 2. Resolve actor (dùng helper, chỉ lookup — không provision vì actor có thể chưa comment trước đó)
+    actor_id = await resolve_or_create_user(db, user)
 
     # 3. Permission check
     is_owner = actor_id is not None and comment.user_id == actor_id

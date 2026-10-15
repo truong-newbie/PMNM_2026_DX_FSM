@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Source file for the pre-commit hook.
+# This file is copied to .git/hooks/pre-commit by scripts/install-hooks.sh
+
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+SCRIPT="$REPO_ROOT/scripts/check-secrets.cjs"
+
+if [ ! -f "$SCRIPT" ]; then
+    echo "⚠️  scripts/check-secrets.cjs not found — skipping secret scan."
+    exit 0
+fi
+
+node "$SCRIPT"
+exit $?

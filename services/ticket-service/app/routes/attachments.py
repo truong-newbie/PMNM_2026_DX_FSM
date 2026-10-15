@@ -24,6 +24,7 @@ from app.db.database import get_db
 from app.models.ticket import Ticket, TicketAttachment, TicketHistory
 from app.models.user import User
 from app.services.storage_service import upload_attachment
+from app.services.user_resolver import resolve_or_create_user
 
 router = APIRouter()
 
@@ -72,43 +73,8 @@ ALLOWED_MIME_TYPES = {
 
 
 async def _resolve_actor_id(db: AsyncSession, user: TokenUser) -> Optional[UUID]:
-    """Lookup User.id by keycloak_id, fallback to username, else auto-provision."""
-    if not user.sub:
-        return None
-
-    result = await db.execute(
-        select(User.id).where(User.keycloak_id == user.sub)
-    )
-    actor_id = result.scalar_one_or_none()
-    if actor_id:
-        return actor_id
-
-    # Match by username (legacy seed has placeholder keycloak_id)
-    result = await db.execute(
-        select(User).where(User.username == user.preferred_username)
-    )
-    legacy = result.scalar_one_or_none()
-    if legacy:
-        from sqlalchemy import update
-        await db.execute(
-            update(User)
-            .where(User.id == legacy.id)
-            .values(keycloak_id=user.sub)
-        )
-        return legacy.id
-
-    # Auto-provision
-    role = user.role if user.role in ("admin", "manager", "technician", "customer") else "customer"
-    new_user = User(
-        keycloak_id=user.sub,
-        username=user.preferred_username or user.sub[:8],
-        email=user.email,
-        full_name=user.full_name,
-        role=role,
-    )
-    db.add(new_user)
-    await db.flush()
-    return new_user.id
+    """Wrapper gọi user_resolver. Giữ signature để không sửa call sites."""
+    return await resolve_or_create_user(db, user)
 
 
 # ─── POST /tickets/{id}/attachments ────────────────────────────────────────
